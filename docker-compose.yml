@@ -1,0 +1,48 @@
+# docker-compose.yml
+
+services:
+  chat_client_a:
+    build: .
+    container_name: cliente_a
+    networks:
+      - chat_network
+    tty: true
+    stdin_open: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # --- LÍNEA MODIFICADA ---
+    # Ahora pasamos AMBOS argumentos
+    command: python main.py --user Alice --interface eth0
+
+  chat_client_b:
+    build: .
+    container_name: cliente_b
+    networks:
+      - chat_network
+    tty: true
+    stdin_open: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # --- LÍNEA MODIFICADA ---
+    command: python main.py --user Bob --interface eth0
+
+networks:
+  chat_network:
+    driver: bridge
+
+#**¿Qué hemos hecho?**
+#*   Hemos añadido `--interface eth0` al comando de inicio de ambos contenedores.
+#*   Esto asegura que tu script `main.py` recibirá `"eth0"` como el nombre de la interfaz y se lo pasará a tu clase `MySocket`, que podrá entonces asociar el socket al dispositivo de red virtual correcto que Docker ha creado.
+
+### Próximos Pasos
+
+#1.  **Guarda los cambios** en tu `docker-compose.yml`.
+#2.  Una vez más, no necesitas reconstruir la imagen (`build`).
+#3.  Simplemente, **ejecuta `docker compose up`**:
+ #   ```bash
+ #   docker compose up
+ #   ```
+
+#Esta vez, la aplicación debería poder encontrar el dispositivo de red `eth0`, crear el socket correctamente y, con suerte, iniciarse sin errores. ¡Estás a un paso de conseguirlo

@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class MySocket:
     ETHERTYPE = 0x88B5  # nuestro protocolo
 
-    def __init__(self, interface: str = "wlan0", create: bool = True, timeout: float = 1.0):
+    def __init__(self, interface: str = "eth0", create: bool = True, timeout: float = 1.0):
         self.INTERFACE = interface
         self.my_socket = None
         self.mac = None

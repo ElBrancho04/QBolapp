@@ -3,6 +3,7 @@ import socket
 import queue
 from core.frame import Frame
 from core.socket import MySocket
+from  core.frame_builder import  FrameFactory
 import time
 #hay que obligar a los usuarios a mandar su nombre de usuario en los broatcast
 
@@ -125,3 +126,47 @@ class AckManagerThread(threading.Thread):
 
     def stop(self):
         self._running = False
+
+
+class OnlineManager(threading.Thread):
+    HELLO_INTERVAL = 30.0  # Enviar un HELLO cada 30 segundos
+    PEER_TIMEOUT = 95.0 
+    def __init__(self,diccionario_usuarios:dict,usuarios_lock:threading.Lock,mensages_a_enviar_:queue.Queue,builder:FrameFactory):
+        super().__init__()
+        self.diccionario_usuarios=diccionario_usuarios
+        self.usuarios_lock=usuarios_lock
+        self.mensajes_a_enviar=mensages_a_enviar_
+        self.builder=builder
+        self.running=True
+
+    def ManageBroadcast(self,frame:Frame):
+        data=frame.data.decode("utf-8").split("|")
+        if len(data==2):
+            if data[0]=="online":
+                with self.usuarios_lock:
+                        _time=time.time()
+                        self.diccionario_usuarios[frame.mac_src]=(data[1],_time)
+                    
+            elif  data[0]=="offline":
+                with self.usuarios_lock:
+                    if frame.mac_src  in self.diccionario_usuarios:
+                        del self.diccionario_usuarios[frame.mac_src]
+        else:
+            print("[Warning] Broadcast inválido recibido.")
+    def ManagePeers(self):
+        _time=time.time()
+        usuarios_a_borrar=[]
+        with self.usuarios_lock:
+            for key,value in self.diccionario_usuarios.items():
+                if (_time-value[1])>self.PEER_TIMEOUT:
+                    usuarios_a_borrar.append(key)
+            for  key in usuarios_a_borrar:
+                del self.diccionario_usuarios[key]
+    def run(self):
+        while self.running:
+            new_broadcast=self.builder.build_broadcast_online()
+            self.mensajes_a_enviar.put(new_broadcast)
+            self.ManagePeers()
+            time.sleep(self.HELLO_INTERVAL)
+                    
+    
