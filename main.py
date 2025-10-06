@@ -17,7 +17,11 @@ import time
 import queue
 import itertools
 import signal
+import math
+import random
 
+
+MAX_PAYLOAD_SIZE=1400#bytes
 # Asegurar que el directorio del proyecto esté en sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
@@ -225,6 +229,41 @@ class App:
         except Exception:
             pass
         print("[Main] Parada completa.")
+
+    def iniciar_transferencia_archivo(self, filepath: str, mac_destino: str,mensajes_a_enviar:queue.Queue):
+        print(f"Preparando el envío de '{filepath}'...")
+        try:
+            filesize = os.path.getsize(filepath)
+            total_fragments = math.ceil(filesize / MAX_PAYLOAD_SIZE)
+            transfer_id = random.randint(1, 0xFFFF)
+            
+            with open(filepath, 'rb') as f:
+                for i in range(total_fragments):
+                    chunk = f.read(MAX_PAYLOAD_SIZE)
+                    
+                    # El primer fragmento podría llevar metadatos
+                    if i == 0:
+                        filename = os.path.basename(filepath)
+                        # Protocolo simple: "filename.ext|datos"
+                        chunk = f"{filename}|".encode('utf-8') + chunk
+
+                    file_frame = Frame(
+                        mac_dst=mac_destino,
+                        mac_src=self.mi_mac,
+                        msg_type="FILE",
+                        transfer_id=transfer_id,
+                        fragment_no=i + 1,
+                        total_frags=total_fragments,
+                        data=chunk
+                    )
+                    
+                    # Poner en la cola de envío. El AckManager se encargará del resto.
+                    self.ack_manager.registrar_mensaje(file_frame)
+            
+            print(f"Todos los {total_fragments} fragmentos para '{filepath}' han sido encolados.")
+            
+        except Exception as e:
+            print(f"Error al preparar el archivo para envío: {e}")
 
 # --------- CLI y loop principal ---------
 def repl_loop(app: App):

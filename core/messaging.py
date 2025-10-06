@@ -49,14 +49,17 @@ class SendingThread(threading.Thread):
         self._socket = _socket
         self.cola_saliente = cola_saliente
         self._running = True
+        self.asignador_id=0
 
     def run(self):
         while self._running:
             try:
-                frame = self.cola_saliente.get(timeout=1.0)
+                frame:Frame = self.cola_saliente.get(timeout=1.0)
                 if frame is None: # Centinela para parar
                     break
-                
+                if frame.INV_TYPE_MAP!="FILE":
+                    frame.transfer_id=self.asignador_id
+                    self.asignador_id+=1
                 self._socket.send_frame(Frame.to_bytes(frame))
 
             except queue.Empty:
