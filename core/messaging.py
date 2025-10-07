@@ -172,5 +172,106 @@ class OnlineManager(threading.Thread):
             self.mensajes_a_enviar.put(new_broadcast)
             self.ManagePeers()
             time.sleep(self.HELLO_INTERVAL)
+
+
+
+class FileAssemblerManagerThread(threading.Thread):
+    TIMEOUT = 120 # Segundos de inactividad antes de descartar una transferencia
+
+    def __init__(self, fragment_queue: queue.Queue, download_directory: str = "."):
+        super().__init__()
+        self.fragment_queue = fragment_queue
+        self.download_directory = download_directory
+        os.makedirs(download_directory, exist_ok=True)
+        
+        # Estructura de datos central: {transfer_id: {'fragments':{...}, 'metadata':{...}}}
+        self._active_transfers = {}
+        self._running = True
+
+    def run(self):
+        print("[AssemblerManager] Hilo de ensamblaje iniciado.")
+        
+        while self._running:
+            try:
+                # Esperar por un nuevo fragmento
+                frame = self.fragment_queue.get(timeout=1.0)
+                if frame is None: # Señal de parada
+                    break
+                
+                self._process_fragment(frame)
+
+            except queue.Empty:
+                # No llegaron fragmentos, es una buena oportunidad para limpiar
+                self._cleanup_timed_out_transfers()
+                continue
+    
+    def _process_fragment(self, frame: Frame):
+        tid = frame.transfer_id
+
+        # Si es el primer fragmento de una nueva transferencia
+        if tid not in self._active_transfers and frame.fragment_no == 1:
+            try:
+                header, data = frame.data.split(b'|', 1)
+                filename = header.decode('utf-8')
+                frame.data = data # Actualizar el frame con solo los datos
+                
+                print(f"[AssemblerManager] Nueva transferencia detectada (ID: {tid}): '{filename}'")
+                self._active_transfers[tid] = {
+                    'filename': filename,
+                    'total_frags': frame.total_frags,
+                    'fragments': {frame.fragment_no: frame.data},
+                    'last_seen': time.time()
+                }
+            except Exception as e:
+                print(f"[AssemblerManager] Error al procesar primer fragmento de {tid}: {e}")
+            return # Salir después de procesar el primer fragmento
+
+        # Si es un fragmento de una transferencia ya activa
+        if tid in self._active_transfers:
+            info = self._active_transfers[tid]
+            
+            if frame.fragment_no not in info['fragments']:
+                info['fragments'][frame.fragment_no] = frame.data
+                info['last_seen'] = time.time()
+                
+                # Comprobar si hemos terminado
+                if len(info['fragments']) == info['total_frags']:
+                    self._assemble_file(tid)
+        # Ignorar fragmentos huérfanos
+
+    def _assemble_file(self, tid: int):
+        info = self._active_transfers[tid]
+        filename = info['filename']
+        filepath = os.path.join(self.download_directory, filename)
+        
+        print(f"[AssemblerManager] Ensamblando '{filename}'...")
+        
+        try:
+            with open(filepath, 'wb') as f:
+                for i in range(1, info['total_frags'] + 1):
+                    f.write(info['fragments'][i])
+            print(f"[AssemblerManager] ¡ÉXITO! Archivo '{filepath}' guardado.")
+        
+        except KeyError:
+            print(f"[AssemblerManager] ERROR: Faltan fragmentos para la transferencia {tid}.")
+        except IOError as e:
+            print(f"[AssemblerManager] ERROR: No se pudo escribir el archivo '{filepath}': {e}")
+        finally:
+            # Limpiar la transferencia de la memoria
+            del self._active_transfers[tid]
+
+    def _cleanup_timed_out_transfers(self):
+        current_time = time.time()
+        tids_to_delete = [
+            tid for tid, info in self._active_transfers.items()
+            if (current_time - info['last_seen']) > self.TIMEOUT
+        ]
+        for tid in tids_to_delete:
+            print(f"[AssemblerManager] Transferencia {tid} ('{self._active_transfers[tid]['filename']}') expiró. Eliminando...")
+            del self._active_transfers[tid]
+
+    def stop(self):
+        self._running = False
+        self.fragment_queue.put(None) # Poner centinela
                     
     

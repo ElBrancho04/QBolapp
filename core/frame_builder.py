@@ -31,4 +31,15 @@ class FrameFactory:
     def build_msg(self,id_mensaje,mensaje:str,mac_dst:str)->Frame: 
             frame=Frame(mac_dst,self.mi_mac,"MSG",id_mensaje,1,1,mensaje.encode("utf-8"))
             return frame
+    def build_file(self,id_mensaje,chunk,fragment_no,mac_dst,total_fragments):
+         file_frame = Frame(
+                        mac_dst=mac_dst,
+                        mac_src=self.mi_mac,
+                        msg_type="FILE",
+                        transfer_id=id_mensaje,
+                        fragment_no=fragment_no,
+                        total_frags=total_fragments,
+                        data=chunk
+                    )
+         return file_frame
                 

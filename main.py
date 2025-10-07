@@ -230,7 +230,7 @@ class App:
             pass
         print("[Main] Parada completa.")
 
-    def iniciar_transferencia_archivo(self, filepath: str, mac_destino: str,mensajes_a_enviar:queue.Queue):
+    def iniciar_transferencia_archivo(self, filepath: str, mac_destino: str,mensajes_a_enviar:queue.Queue,builder:FrameFactory):
         print(f"Preparando el envío de '{filepath}'...")
         try:
             filesize = os.path.getsize(filepath)
@@ -247,15 +247,7 @@ class App:
                         # Protocolo simple: "filename.ext|datos"
                         chunk = f"{filename}|".encode('utf-8') + chunk
 
-                    file_frame = Frame(
-                        mac_dst=mac_destino,
-                        mac_src=self.mi_mac,
-                        msg_type="FILE",
-                        transfer_id=transfer_id,
-                        fragment_no=i + 1,
-                        total_frags=total_fragments,
-                        data=chunk
-                    )
+                    file_frame=builder.build_file(transfer_id,chunk,i+1,mac_destino,total_fragments)
                     
                     # Poner en la cola de envío. El AckManager se encargará del resto.
                     self.ack_manager.registrar_mensaje(file_frame)
