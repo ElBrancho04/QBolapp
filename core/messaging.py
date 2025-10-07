@@ -27,7 +27,8 @@ class HearingThread(threading.Thread):
                 bites = self._socket.receive_frame()
                 try:
                     frame = Frame.from_bytes(bites)
-                    self.cola_entrante.put(frame)
+                    if frame.mac_dst in (self._socket.mac,"FF:FF:FF:FF:FF:FF"):
+                        self.cola_entrante.put(frame)
                 except Exception as e:
                     print(f"[Listener] Error parseando el frame: {e}")
             except socket.timeout:
