@@ -5,6 +5,7 @@ import time
 import os
 import random
 import logging
+import shutil
 from typing import Optional, Dict, Tuple, Any
 from core.frame import Frame
 from core.frame_builder import FrameFactory
@@ -303,6 +304,8 @@ class FileAssemblerManagerThread(threading.Thread):
                         'mac_src': frame.mac_src
                     }
                     self.logger.info(f"Nueva transferencia {tid}: '{filename}' ({frame.total_frags} fragmentos) de {frame.mac_src}")
+                    if self._active_transfers[tid]['total_frags']==1:
+                        return self._assemble_file(tid)
                     return True
                     
                 except Exception as e:
@@ -512,53 +515,86 @@ class FileSender:
             transfer_id = self.ack_manager.get_next_transfer_id()
         else:
             transfer_id = self._gen_transfer_id()
+
+        path_to_send = filepath
+        temp_archive_path = None  # Variable para guardar la ruta del archivo temporal
+
+        # --- NUEVO: Lógica para manejar directorios ---
+        if os.path.isdir(filepath):
+            self.logger.info(f"Detectada carpeta: '{filepath}'. Comprimiendo...")
             
-        filesize = os.path.getsize(filepath)
-        total_frags = (filesize + self.CHUNK_SIZE - 1) // self.CHUNK_SIZE
-        
-        if total_frags == 0:
-            total_frags = 1
-
-        filename = os.path.basename(filepath)
-        descripcion = f"'{filename}' ({filesize} bytes)"
-        
-        self.logger.info(f"Iniciando transferencia {transfer_id}: {descripcion} -> {mac_dst}")
-
-        try:
-            with open(filepath, 'rb') as f:
-                for fragment_no in range(1, total_frags + 1):
-                    chunk = f.read(self.CHUNK_SIZE)
-                    if not chunk:
-                        break
-
-                    if fragment_no == 1:
-                        payload = f"{filename}|".encode('utf-8') + chunk
-                    else:
-                        payload = chunk
-
-                    frame = self.builder.build_file(transfer_id, payload, fragment_no, mac_dst, total_frags)
-                    
-                    if reliable and self.ack_manager:
-                        frag_desc = f"fragmento {fragment_no}/{total_frags} de {descripcion}"
-                        if not self.ack_manager.registrar_mensaje(frame, frag_desc):
-                            self.logger.error(f"No se pudo registrar {frag_desc}")
-                            return transfer_id
-                    else:
-                        self.cola_saliente.put(frame)
-                        
-                    if fragment_no % 10 == 0:
-                        time.sleep(0.01)
-
-            if reliable:
-                self.logger.info(f"Transferencia confiable {transfer_id} iniciada: {total_frags} fragmentos")
-            else:
-                self.logger.info(f"Transferencia no confiable {transfer_id} completada")
+            # Crear un nombre para el archivo temporal que sea único
+            archive_basename = f"temp_transfer_{transfer_id}"
+            
+            try:
+                # shutil.make_archive crea un archivo comprimido.
+                # Parámetros:
+                # 1. base_name: El nombre del archivo sin extensión (ej. 'temp_transfer_123')
+                # 2. format: El formato de compresión ('zip', 'tar', etc.)
+                # 3. root_dir: El directorio que se va a comprimir.
+                temp_archive_path = shutil.make_archive(archive_basename, 'zip', filepath)
                 
-            return transfer_id
+                # Ahora, la ruta que realmente enviaremos es la del archivo ZIP recién creado
+                path_to_send = temp_archive_path
+                self.logger.info(f"Carpeta comprimida en: '{path_to_send}'")
+                
+            except Exception as e:
+                self.logger.error(f"Error al comprimir la carpeta: {e}")
+                raise # Relanzar la excepción para detener la operación
+        try:
             
-        except Exception as e:
-            self.logger.error(f"Error en transferencia {transfer_id}: {e}")
-            raise
+            filesize = os.path.getsize(path_to_send)
+            total_frags = (filesize + self.CHUNK_SIZE - 1) // self.CHUNK_SIZE
+            
+            if total_frags == 0:
+                total_frags = 1
 
+            filename = os.path.basename(path_to_send)
+            descripcion = f"'{filename}' ({filesize} bytes)"
+            
+            self.logger.info(f"Iniciando transferencia {transfer_id}: {descripcion} -> {mac_dst}")
+
+            try:
+                with open(path_to_send, 'rb') as f:
+                    for fragment_no in range(1, total_frags + 1):
+                        chunk = f.read(self.CHUNK_SIZE)
+                        if not chunk:
+                            break
+
+                        if fragment_no == 1:
+                            payload = f"{filename}|".encode('utf-8') + chunk
+                        else:
+                            payload = chunk
+
+                        frame = self.builder.build_file(transfer_id, payload, fragment_no, mac_dst, total_frags)
+                        
+                        if reliable and self.ack_manager:
+                            frag_desc = f"fragmento {fragment_no}/{total_frags} de {descripcion}"
+                            if not self.ack_manager.registrar_mensaje(frame, frag_desc):
+                                self.logger.error(f"No se pudo registrar {frag_desc}")
+                                return transfer_id
+                        else:
+                            self.cola_saliente.put(frame)
+                            
+                        if fragment_no % 10 == 0:
+                            time.sleep(0.01)
+
+                if reliable:
+                    self.logger.info(f"Transferencia confiable {transfer_id} iniciada: {total_frags} fragmentos")
+                else:
+                    self.logger.info(f"Transferencia no confiable {transfer_id} completada")
+                    
+                return transfer_id
+                
+            except Exception as e:
+                self.logger.error(f"Error en transferencia {transfer_id}: {e}")
+                raise
+        finally:    
+            if temp_archive_path:
+                try:
+                    self.logger.info(f"Limpiando archivo temporal: {temp_archive_path}")
+                    os.remove(temp_archive_path)
+                except Exception as e:
+                    self.logger.error(f"No se pudo eliminar el archivo temporal '{temp_archive_path}': {e}")
 # ELIMINAR la configuración de logging duplicada al final del archivo
 # Esto ya se configura en main.py

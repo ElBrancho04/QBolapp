@@ -1,17 +1,18 @@
 # Dockerfile
 
-# 1. Usar una imagen base oficial de Python. 'slim' es una versión ligera.
-FROM python:3.9-slim
+# 1. Usar una imagen base de Python completa que incluya las herramientas de construcción.
+FROM python:3.9
 
-# 2. Establecer el directorio de trabajo dentro del contenedor.
+# 2. Instalar las dependencias del sistema operativo para Tkinter.
+#    -y actualiza sin pedir confirmación.
+RUN apt-get update && apt-get install -y tk
+
+# 3. Establecer el directorio de trabajo.
 WORKDIR /app
 
-# 3. Copiar todos los archivos de tu proyecto (tu .py, etc.) al directorio /app del contenedor.
+# 4. Copiar todos los archivos del proyecto al contenedor.
 COPY . .
 
-# 4. (Opcional) Si tuvieras dependencias en un requirements.txt, las instalarías aquí.
-# RUN pip install -r requirements.txt
-
-# 5. El comando que se ejecutará cuando el contenedor se inicie.
-#    Asumo que tu archivo principal se llama 'main.py' (cámbialo si es necesario).
-CMD ["python", "main.py"]
+# 5. Definir el comando por defecto (será sobreescrito, pero es una buena práctica).
+#    Asumo que tu archivo principal se llama 'gui_main.py'.
+CMD ["python", "gui_main.py"]
