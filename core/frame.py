@@ -9,6 +9,12 @@ ETHERTYPE = 0x88B5
 HEADER_FMT = "!6s6sHBHHHH"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 CRC_SIZE = 4
+SECRET_KEY = b"QBolappKey"
+
+def xor_encrypt(data: bytes, key: bytes = SECRET_KEY) -> bytes:
+    """Cifra o descifra datos con XOR simétrico."""
+    key_len = len(key)
+    return bytes([b ^ key[i % key_len] for i, b in enumerate(data)])
 
 class Frame:
     """
@@ -70,7 +76,8 @@ class Frame:
             self.total_frags,
             payload_len
         )
-        content = header + self.data
+        encrypted_data = xor_encrypt(self.data)
+        content = header + encrypted_data
         crc = zlib.crc32(content) & 0xFFFFFFFF
         crc_bytes = struct.pack("!I", crc)
         return content + crc_bytes
@@ -93,7 +100,8 @@ class Frame:
         if len(raw) < expected_len:
             raise ValueError(f"Trama incompleta: esperado {expected_len}, recibido {len(raw)}")
             
-        payload = raw[HEADER_SIZE:HEADER_SIZE + payload_len]
+        encrypted_payload = raw[HEADER_SIZE:HEADER_SIZE + payload_len]
+        payload = xor_encrypt(encrypted_payload)
         crc_recv = struct.unpack("!I", raw[HEADER_SIZE + payload_len:expected_len])[0]
         
         calculated_crc = zlib.crc32(raw[:HEADER_SIZE + payload_len]) & 0xFFFFFFFF
