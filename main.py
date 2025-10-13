@@ -209,9 +209,9 @@ class App:
         print(f"Broadcast enviado: {text}")
 
     def send_file(self, filepath: str, mac_dst: str, reliable: bool = False):
-        """Envía archivo a un destino"""
-        if not os.path.isfile(filepath):
-            print(f"Error: Archivo no encontrado: {filepath}")
+        """Envía archivo o carpeta a un destino"""
+        if not os.path.exists(filepath):
+            print(f"Error: La ruta no existe: {filepath}")
             return
             
         try:
@@ -225,7 +225,7 @@ class App:
             return transfer_id
             
         except Exception as e:
-            print(f"✗ Error enviando archivo: {e}")
+            print(f"✗ Error enviando: {e}")
             return None
 
     def list_peers(self):
@@ -331,9 +331,9 @@ def repl_loop(app: App):
                     mac_dst = parts[2].upper()
                     reliable = len(parts) > 3 and parts[3].lower() == "reliable"
                     
-                    # Verificar que el archivo existe
+                    # Verificar que la ruta existe (archivo o carpeta)
                     if not os.path.exists(filepath):
-                        print(f"Error: El archivo '{filepath}' no existe")
+                        print(f"Error: La ruta '{filepath}' no existe")
                     else:
                         # Llamar al método corregido
                         app.send_file(filepath, mac_dst, reliable)
