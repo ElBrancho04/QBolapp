@@ -506,8 +506,8 @@ class FileSender:
         return random.randint(1, 0xFFFF)
 
     def start_transfer(self, filepath: str, mac_dst: str, reliable: bool = False) -> int:
-        if not os.path.isfile(filepath):
-            raise FileNotFoundError(f"Archivo no encontrado: {filepath}")
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"La ruta '{filepath}' no existe")
             
         mac_dst = mac_dst.upper()
         

@@ -303,7 +303,7 @@ class ChatGUI:
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Envío de archivos
-        send_frame = ttk.LabelFrame(main_frame, text="Enviar Archivo")
+        send_frame = ttk.LabelFrame(main_frame, text="Enviar Archivo o Carpeta (las carpetas se envian como comprimido .zip)")
         send_frame.pack(fill=tk.X, padx=5, pady=5)
 
         # Selección de archivo
@@ -593,22 +593,39 @@ class ChatGUI:
         self.status_var.set(f"Destino seleccionado: {mac}")
 
     def select_file(self):
-        """Selecciona archivo para enviar"""
-        filename = filedialog.askopenfilename(
-            title="Seleccionar archivo",
-            filetypes=[("Todos los archivos", "*.*")]
-        )
-        if filename:
-            self.file_var.set(filename)
+        """Selecciona archivo o carpeta para enviar"""
+        try:
+            # Preguntar al usuario si quiere seleccionar una carpeta
+            elegir_carpeta = messagebox.askyesno(
+                "Seleccionar carpeta o archivo",
+                "¿Desea seleccionar una CARPETA para enviar? (Si no, se seleccionará un archivo)"
+            )
+
+            if elegir_carpeta:
+                # Seleccionar carpeta
+                folder = filedialog.askdirectory(title="Seleccionar carpeta para enviar")
+                if folder:
+                    self.file_var.set(folder)
+            else:
+                # Seleccionar archivo
+                filename = filedialog.askopenfilename(
+                    title="Seleccionar archivo para enviar",
+                    filetypes=[("Todos los archivos", "*.*")]
+                )
+                if filename:
+                    self.file_var.set(filename)
+        except Exception as e:
+            logger.error(f"Error en selección de archivo/carpeta: {e}")
+            messagebox.showerror("Error", f"No se pudo seleccionar archivo/carpeta: {e}")
 
     def send_file(self):
-        """Envía archivo"""
+        """Envía archivo o carpeta"""
         filepath = self.file_var.get()
         mac_dst = self.file_dest_var.get().strip()
         reliable = self.reliable_var.get()
 
-        if not filepath or not os.path.isfile(filepath):
-            messagebox.showwarning("Advertencia", "Seleccione un archivo válido")
+        if not filepath or not os.path.exists(filepath):
+            messagebox.showwarning("Advertencia", "Seleccione una ruta válida (archivo o carpeta)")
             return
             
         if not mac_dst:
@@ -617,19 +634,21 @@ class ChatGUI:
 
         try:
             transfer_id = self.file_sender.start_transfer(filepath, mac_dst, reliable)
+            file_type = "carpeta" if os.path.isdir(filepath) else "archivo"
+            
             if reliable:
                 self.add_to_chat("SISTEMA", 
-                    f"Transferencia confiable {transfer_id} iniciada: {os.path.basename(filepath)}", 
+                    f"Transferencia confiable {transfer_id} iniciada: {os.path.basename(filepath)} ({file_type})", 
                     system=True)
             else:
                 self.add_to_chat("SISTEMA", 
-                    f"Transferencia no confiable {transfer_id} completada: {os.path.basename(filepath)}", 
+                    f"Transferencia no confiable {transfer_id} completada: {os.path.basename(filepath)} ({file_type})", 
                     system=True)
             
             self.file_var.set("")
             
         except Exception as e:
-            messagebox.showerror("Error", f"Error enviando archivo: {e}")
+            messagebox.showerror("Error", f"Error enviando: {e}")
 
     def _refresh_downloads(self):
         """Actualiza la lista de descargas si hay nuevos archivos en el directorio."""
