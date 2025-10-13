@@ -195,9 +195,14 @@ class ChatGUI:
 
     def restart_launcher(self):
         """Reinicia el lanzador"""
-        self.stop()
         try:
-            subprocess.run([sys.executable, "gui_launcher.py"])
+            self.stop()
+            if self.root:
+                self.root.destroy()
+
+            subprocess.Popen([sys.executable, "gui_launcher.py"])
+            os._exit(0)
+
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo reiniciar el lanzador: {e}")
 
